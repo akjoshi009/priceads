@@ -1,0 +1,195 @@
+import pandas as pd
+from sklearn import preprocessing
+from sklearn.model_selection import train_test_split
+import lightgbm as lgb
+from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import numpy as np
+from catboost import CatBoostClassifier
+
+
+
+
+
+
+train=pd.read_csv(r"D:\24Projects\Predict the ad success\Dataset\Train.csv")
+test=pd.read_csv(r"D:\24Projects\Predict the ad success\Dataset\Test.csv")
+
+
+train.columns
+train.dtypes
+
+test.columns
+test.dtypes
+
+plt.plot(train["ratings"])
+
+le = preprocessing.LabelEncoder()
+le.fit(train['industry'])
+train['industry1']=le.transform(train['industry'])
+test['industry1']=le.transform(test['industry'])
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['genre'])
+train['genre1']=le.transform(train['genre'])
+test['genre1']=le.transform(test['genre'])
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['targeted_sex'])
+train['targeted_sex1']=le.transform(train['targeted_sex'])
+test['targeted_sex1']=le.transform(test['targeted_sex'])
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['expensive'])
+train['expensive1']=le.transform(train['expensive'])
+test['expensive1']=le.transform(test['expensive'])
+
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['money_back_guarantee'])
+train['money_back_guarantee1']=le.transform(train['money_back_guarantee'])
+test['money_back_guarantee1']=le.transform(test['money_back_guarantee'])
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['airtime'])
+train['airtime1']=le.transform(train['airtime'])
+test['airtime1']=le.transform(test['airtime'])
+
+train['avgtm']=np.log(train["average_runtime(minutes_per_week)"])
+test['avgtm']=np.log(test["average_runtime(minutes_per_week)"])
+
+
+def convertcountries(text):
+    text=str(text)
+    print(text)
+    if(text=='United-States' or text=='Mexico'):
+        return text
+    else:
+        return "International"
+    
+
+def convertrelation(text):
+    text=str(text)
+    print(text)
+    if(text=='Married-civ-spouse' or text=='Never-married'):
+        return text
+    else:
+        return "Other"
+    
+
+#print(convertcountries("United-States"))
+
+
+train["airloccon"]=train['airlocation'].apply(convertcountries)
+test["airloccon"]=test['airlocation'].apply(convertcountries)
+
+
+
+train["realtionship_status"]=train['realtionship_status'].apply(convertrelation)
+test["realtionship_status"]=test['realtionship_status'].apply(convertrelation)
+
+train["airloccon"].value_counts()
+
+le = preprocessing.LabelEncoder()
+le.fit(train['airlocation'])
+train['airlocation1']=le.transform(train['airloccon'])
+test['airlocation1']=le.transform(test['airloccon'])
+
+
+le = preprocessing.LabelEncoder()
+le.fit(train['realtionship_status'])
+train['realtionship_status1']=le.transform(train['realtionship_status'])
+test['realtionship_status1']=le.transform(test['realtionship_status'])
+
+
+#train['realtionship_status'].value_counts()
+
+train1=train[train['ratings']>0.0039777093]
+#train1=train1[train1['ratings']<1]
+
+train1=train1[train1['avgtm']>0.6931471805599453]
+
+
+
+colx=['realtionship_status1', 'industry1', 'genre1','targeted_sex1',
+       'airlocation1', 'expensive1', 'money_back_guarantee1','avgtm','airtime1','ratings']
+
+
+
+dftrain = pd.get_dummies(train1, columns=['realtionship_status1', 'industry1', 'genre1','airlocation1'])
+dftest = pd.get_dummies(test, columns=['realtionship_status1', 'industry1', 'genre1','airlocation1'])
+
+
+dftrain.columns
+
+colxx=['ratings','targeted_sex1', 'expensive1', 'money_back_guarantee1', 'airtime1',
+       'avgtm', 'realtionship_status1_0',
+       'realtionship_status1_1', 'realtionship_status1_2', 'industry1_0',
+       'industry1_1', 'industry1_2', 'industry1_3', 'industry1_4',
+       'industry1_5', 'genre1_0', 'genre1_1', 'genre1_2', 'genre1_3',
+       'genre1_4', 'airlocation1_19', 'airlocation1_26', 'airlocation1_39']
+
+
+#Splitting dataset to train test
+
+X_train, X_test, y_train, y_test = train_test_split(
+    dftrain[colxx],train1['netgain'], test_size=0.33, random_state=42)
+
+
+
+clf = lgb.LGBMClassifier(boosting_type='gbdt', 
+		num_leaves=31, 
+		max_depth=80, 
+		learning_rate=0.15, 
+		n_estimators=1000, 
+		max_bin=255, 
+		subsample_for_bin=50000, 
+		objective=None, 
+		min_split_gain=0, 
+		min_child_weight=3,
+		min_child_samples=10, 
+		subsample=1, 
+		subsample_freq=1, 
+		colsample_bytree=1, 
+		reg_alpha=0.1, 
+		reg_lambda=0, 
+		seed=17,
+		silent=False, 
+		nthread=-1)
+
+
+
+
+clf.fit(X_train,y_train)
+pred=clf.predict(X_test)
+accuracy_score(y_test, pred)
+
+
+confusion_matrix(y_test, pred)
+
+
+
+
+#apply to test dataset
+
+clf.fit(dftrain[colxx],train1['netgain'])
+pred=clf.predict(dftest[colxx])
+
+
+
+
+feat_importances = pd.Series(clf.feature_importances_, index=train[colx].columns)
+feat_importances.plot(kind='barh')
+#plt.plot(train[colx].columns,clf.feature_importances_)
+
+
+test['netgain']=pred
+
+
+test[['id','netgain']].to_csv(r"D:\24Projects\Predict the ad success\Dataset\output.csv",index=False)
